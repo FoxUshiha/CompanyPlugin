@@ -52,5 +52,4 @@ data:
   Steve:
     group: 1
 
-
 ```
