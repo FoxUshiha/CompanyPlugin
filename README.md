@@ -1,0 +1,2 @@
+# CompanyPlugin
+Minecraft Company Plugin.
