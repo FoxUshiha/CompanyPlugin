@@ -4,17 +4,26 @@ Minecraft Company Plugin.
 Dependencies:
 
 Vault - https://www.spigotmc.org/resources/vault.34315/
+
 An economy plugin - https://www.spigotmc.org/resources/cmi-300-commands-insane-kits-portals-essentials-economy-mysql-sqlite-much-more.3742/
+
 Free One - https://essentialsx.net/downloads
+
 
 Commands:
 
 /company 
+
 /company info
+
 /company hire
+
 /company fire
+
 /company leave
+
 /company reload (OP)
+
 
 No permissions.
 
