@@ -22,10 +22,6 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
         this.manager = plugin.getCompanyManager();
     }
 
-    /* ========================================================= */
-    /* ========================= COMMAND ======================== */
-    /* ========================================================= */
-
     @Override
     public boolean onCommand(CommandSender sender, Command command,
                              String label, String[] args) {
@@ -46,17 +42,13 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
             case "info": return handleInfo(sender, args.length >= 2 ? args[1] : null);
             default:
                 Company company = manager.getCompany(args[0]);
-                if (company != null) {
-                    return handleInfo(sender, args[0]);
-                }
+                if (company != null) return handleInfo(sender, args[0]);
                 sender.sendMessage(ChatColor.RED + "Unknown subcommand.");
                 return true;
         }
     }
 
-    /* ========================================================= */
     /* ========================== INFO ========================== */
-    /* ========================================================= */
 
     private boolean handleInfo(CommandSender sender, String companyName) {
 
@@ -93,29 +85,28 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    /* ========================================================= */
     /* ========================== HIRE ========================== */
-    /* ========================================================= */
 
     private boolean handleHire(CommandSender sender, String[] args) {
 
         if (!(sender instanceof Player)) return true;
         Player executor = (Player) sender;
 
-        if (args.length < 2) {
+        if (args.length < 4) {
             executor.sendMessage(ChatColor.RED +
-                    "Usage: /company hire <player> [role] [company]");
+                    "Usage: /company hire <player> <company> <role>");
             return true;
         }
 
         String targetName = args[1];
-        String roleArg = args.length >= 3 ? args[2] : null;
-        String companyArg = args.length >= 4 ? args[3] : null;
+        String companyName = args[2];
+        String roleName = args[3];
 
-        Company company = resolveCompanyForExecutor(executor, companyArg);
+        Company company = manager.getCompany(companyName);
 
         if (company == null ||
-                !company.hasPermission(executor.getName(), "can-hire")) {
+                !company.hasPermission(executor.getName(), "can-hire") ||
+                !company.isEmployee(executor.getName())) {
             executor.sendMessage(ChatColor.RED + "No permission.");
             return true;
         }
@@ -126,7 +117,7 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
         }
 
         int executorGroup = company.getEmployeeGroup(executor.getName());
-        int targetGroup = company.getGroupIdByName(roleArg);
+        int targetGroup = company.getGroupIdByName(roleName);
 
         if (targetGroup == -1 || executorGroup >= targetGroup) {
             executor.sendMessage(ChatColor.RED + "Invalid role.");
@@ -134,36 +125,33 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
         }
 
         company.addEmployee(targetName, targetGroup);
-
-        // EXECUTA COMANDO MESMO OFFLINE
         company.executeGroupCommands("on-hire", targetName, targetGroup);
 
         executor.sendMessage(ChatColor.GREEN + "Player hired.");
         return true;
     }
 
-    /* ========================================================= */
     /* ========================== FIRE ========================== */
-    /* ========================================================= */
 
     private boolean handleFire(CommandSender sender, String[] args) {
 
         if (!(sender instanceof Player)) return true;
         Player executor = (Player) sender;
 
-        if (args.length < 2) {
+        if (args.length < 3) {
             executor.sendMessage(ChatColor.RED +
-                    "Usage: /company fire <player> [company]");
+                    "Usage: /company fire <player> <company>");
             return true;
         }
 
         String targetName = args[1];
-        String companyArg = args.length >= 3 ? args[2] : null;
+        String companyName = args[2];
 
-        Company company = resolveCompanyForExecutor(executor, companyArg);
+        Company company = manager.getCompany(companyName);
 
         if (company == null ||
-                !company.hasPermission(executor.getName(), "can-fire")) {
+                !company.hasPermission(executor.getName(), "can-fire") ||
+                !company.isEmployee(executor.getName())) {
             executor.sendMessage(ChatColor.RED + "No permission.");
             return true;
         }
@@ -174,25 +162,27 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
         }
 
         company.removeEmployee(targetName);
-
-        // EXECUTA COMANDO MESMO OFFLINE
         company.executeGlobalCommands("on-fire", targetName);
 
         executor.sendMessage(ChatColor.GREEN + "Player fired.");
         return true;
     }
 
-    /* ========================================================= */
-    /* ========================== LEAVE ========================= */
-    /* ========================================================= */
+    /* ========================== LEAVE ========================== */
 
     private boolean handleLeave(CommandSender sender, String[] args) {
 
         if (!(sender instanceof Player)) return true;
         Player player = (Player) sender;
 
-        String companyArg = args.length >= 2 ? args[1] : null;
-        Company company = resolveCompanyForExecutor(player, companyArg);
+        if (args.length < 2) {
+            player.sendMessage(ChatColor.RED +
+                    "Usage: /company leave <company>");
+            return true;
+        }
+
+        String companyName = args[1];
+        Company company = manager.getCompany(companyName);
 
         if (company == null || !company.isEmployee(player.getName())) {
             player.sendMessage(ChatColor.RED + "You are not in this company.");
@@ -200,31 +190,36 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
         }
 
         company.removeEmployee(player.getName());
-
-        // EXECUTA MESMO OFFLINE
         company.executeGlobalCommands("on-fire", player.getName());
 
         player.sendMessage(ChatColor.RED + "You left the company.");
         return true;
     }
 
-    /* ========================================================= */
-    /* ======================== DEPOSIT ========================= */
-    /* ========================================================= */
+    /* ========================== DEPOSIT ========================== */
 
     private boolean handleDeposit(CommandSender sender, String[] args) {
 
         if (!(sender instanceof Player)) return true;
         Player player = (Player) sender;
 
-        if (args.length < 2) {
+        if (args.length < 3) {
             player.sendMessage(ChatColor.RED +
-                    "Usage: /company deposit <amount> [company]");
+                    "Usage: /company deposit <company> <amount>");
+            return true;
+        }
+
+        String companyName = args[1];
+        Company company = manager.getCompany(companyName);
+
+        if (company == null ||
+                !company.hasPermission(player.getName(), "can-deposit")) {
+            player.sendMessage(ChatColor.RED + "No permission.");
             return true;
         }
 
         double amount;
-        try { amount = Double.parseDouble(args[1]); }
+        try { amount = Double.parseDouble(args[2]); }
         catch (Exception e) {
             player.sendMessage(ChatColor.RED + "Invalid amount.");
             return true;
@@ -232,16 +227,6 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
 
         if (amount <= 0) {
             player.sendMessage(ChatColor.RED + "Amount must be greater than 0.");
-            return true;
-        }
-
-        String companyArg = args.length >= 3 ? args[2] : null;
-
-        Company company = manager.resolveCompanyForExecutor(
-                player.getName(), companyArg, "can-deposit");
-
-        if (company == null) {
-            player.sendMessage(ChatColor.RED + "No permission.");
             return true;
         }
 
@@ -259,23 +244,30 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    /* ========================================================= */
-    /* ======================== WITHDRAW ======================== */
-    /* ========================================================= */
+    /* ========================== WITHDRAW ========================== */
 
     private boolean handleWithdraw(CommandSender sender, String[] args) {
 
         if (!(sender instanceof Player)) return true;
         Player player = (Player) sender;
 
-        if (args.length < 2) {
+        if (args.length < 3) {
             player.sendMessage(ChatColor.RED +
-                    "Usage: /company withdraw <amount> [company]");
+                    "Usage: /company withdraw <company> <amount>");
+            return true;
+        }
+
+        String companyName = args[1];
+        Company company = manager.getCompany(companyName);
+
+        if (company == null ||
+                !company.hasPermission(player.getName(), "can-withdraw")) {
+            player.sendMessage(ChatColor.RED + "No permission.");
             return true;
         }
 
         double amount;
-        try { amount = Double.parseDouble(args[1]); }
+        try { amount = Double.parseDouble(args[2]); }
         catch (Exception e) {
             player.sendMessage(ChatColor.RED + "Invalid amount.");
             return true;
@@ -286,12 +278,7 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        String companyArg = args.length >= 3 ? args[2] : null;
-
-        Company company = manager.resolveCompanyForExecutor(
-                player.getName(), companyArg, "can-withdraw");
-
-        if (company == null || company.getBalance() < amount) {
+        if (company.getBalance() < amount) {
             player.sendMessage(ChatColor.RED + "Not enough company funds.");
             return true;
         }
@@ -305,9 +292,7 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    /* ========================================================= */
-    /* ========================= RELOAD ========================= */
-    /* ========================================================= */
+    /* ========================== RELOAD ========================== */
 
     private boolean handleReload(CommandSender sender) {
 
@@ -321,9 +306,7 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    /* ========================================================= */
-    /* ======================= TAB COMPLETE ===================== */
-    /* ========================================================= */
+    /* ========================== TAB COMPLETE ========================== */
 
     @Override
     public List<String> onTabComplete(CommandSender sender,
@@ -334,13 +317,11 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
         try {
 
             if (args.length == 1) {
-                List<String> base = new ArrayList<>(Arrays.asList(
+                return filter(Arrays.asList(
                         "hire", "fire", "leave",
                         "deposit", "withdraw",
                         "reload", "info"
-                ));
-                base.addAll(manager.getCompanyNames());
-                return filter(base, args[0]);
+                ), args[0]);
             }
 
             if (!(sender instanceof Player))
@@ -354,30 +335,33 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
                 if (args.length == 2)
                     return filter(getAllPlayerNames(), args[1]);
 
-                if (args.length == 3) {
-                    Company company = resolveCompanyForExecutor(player, null);
-                    if (company != null)
-                        return filter(company.getGroupTags(), args[2]);
-                }
+                if (args.length == 3)
+                    return filter(getExecutorCompanies(player), args[2]);
 
-                if (args.length == 4)
-                    return filter(manager.getCompanyNames(), args[3]);
+                if (args.length == 4) {
+                    Company company = manager.getCompany(args[2]);
+                    if (company != null)
+                        return filter(company.getGroupTags(), args[3]);
+                }
             }
 
             if (sub.equals("fire")) {
 
-                if (args.length == 2) {
-                    Company company = resolveCompanyForExecutor(player, null);
-                    if (company != null)
-                        return filter(new ArrayList<>(company.getEmployees().keySet()), args[1]);
-                }
+                if (args.length == 2)
+                    return filter(getAllPlayerNames(), args[1]);
 
                 if (args.length == 3)
-                    return filter(manager.getCompanyNames(), args[2]);
+                    return filter(getExecutorCompanies(player), args[2]);
+            }
+
+            if (sub.equals("deposit") || sub.equals("withdraw")) {
+
+                if (args.length == 2)
+                    return filter(getExecutorCompanies(player), args[1]);
             }
 
             if (sub.equals("leave") && args.length == 2)
-                return filter(manager.getCompanyNames(), args[1]);
+                return filter(getExecutorCompanies(player), args[1]);
 
             if (sub.equals("info") && args.length == 2)
                 return filter(manager.getCompanyNames(), args[1]);
@@ -387,9 +371,15 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
         return Collections.emptyList();
     }
 
-    /* ========================================================= */
-    /* ========================= HELPERS ======================== */
-    /* ========================================================= */
+    /* ========================== HELPERS ========================== */
+
+    private List<String> getExecutorCompanies(Player player) {
+        return manager.getCompanies().stream()
+                .filter(c -> c.isEmployee(player.getName()))
+                .map(Company::getName)
+                .sorted()
+                .collect(Collectors.toList());
+    }
 
     private List<String> getAllPlayerNames() {
         return Arrays.stream(Bukkit.getOfflinePlayers())
@@ -404,15 +394,5 @@ public class CompanyCommand implements CommandExecutor, TabCompleter {
                 .filter(s -> s.toLowerCase().startsWith(current.toLowerCase()))
                 .sorted()
                 .collect(Collectors.toList());
-    }
-
-    private Company resolveCompanyForExecutor(Player player, String companyArg) {
-
-        if (companyArg != null)
-            return manager.getCompany(companyArg);
-
-        return manager.getCompanies().stream()
-                .filter(c -> c.isEmployee(player.getName()))
-                .findFirst().orElse(null);
     }
 }

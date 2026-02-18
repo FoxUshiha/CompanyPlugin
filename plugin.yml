@@ -1,5 +1,5 @@
 name: CompanyEconomy
-version: 1.8
+version: 1.9
 main: com.foxsrv.companyeconomy.CompanyEconomy
 api-version: 1.20
 depend: [Vault]
